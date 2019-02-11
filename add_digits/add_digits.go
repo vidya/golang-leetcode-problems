@@ -16,19 +16,6 @@
 
 package main
 
-import "fmt"
-
-func sumOnce(num int) int {
-	n, sum := num, 0
-
-	for n != 0 {
-		sum += n % 10
-		n /= 10
-	}
-
-	return sum
-}
-
 // AddDigits():
 // add digits of num. repeat the process till you are left with
 // a single digit.
@@ -36,18 +23,24 @@ func sumOnce(num int) int {
 // return the single digit result
 //
 func AddDigits(num int) int {
-	sum := num
+	sumOnce := func(num int) int {
+		n, sum := num, 0
+
+		for n != 0 {
+			sum += n % 10
+			n /= 10
+		}
+
+		return sum
+	}
+
+	myNum := num
+	sum := myNum
 
 	for sum/10 != 0 {
-		sum = sumOnce(num)
-		num = sum
+		sum = sumOnce(myNum)
+		myNum = sum
 	}
 
 	return sum
-}
-
-func main() {
-	finalSum := AddDigits(38)
-
-	fmt.Printf("finalSum = %d\n", finalSum)
 }

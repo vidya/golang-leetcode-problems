@@ -6,24 +6,31 @@ import (
 	"testing"
 )
 
-func testFunc(t *testing.T, test_name string, num int, want int) {
-	got, want := AddDigits(num), want
-
-	if got != want {
-		t.Errorf("%s: got '%d' want '%d'", test_name, got, want)
-		fmt.Printf("\nFAIL: %s\n\n", test_name)
-
-		os.Exit(3)
-	}
-
-	fmt.Printf("PASS: %s\n", test_name)
+type paramsType struct {
+	testName string
+	num      int
+	want     int
 }
 
+
 func TestAddDigits(t *testing.T) {
-	testFunc(t, "test_1_13", 13, 4)
-	testFunc(t, "test_2_267", 267, 6)
-	testFunc(t, "test_3_5013", 5013, 9)
+	testFunc := func(params paramsType) {
+		t.Helper()
 
-	testFunc(t, "test_4_5", 5, 5)
+		got := AddDigits(params.num)
 
+		if got != params.want {
+			t.Errorf("%s: got '%d' want '%d'", params.testName, got, params.want)
+			fmt.Printf("\nFAIL: %s\n\n", params.testName)
+
+			os.Exit(3)
+		}
+
+		fmt.Printf("PASS: %s\n", params.testName)
+	}
+
+	testFunc(paramsType{"test_1_13", 13, 4})
+	testFunc(paramsType{"test_2_267", 267, 6})
+	testFunc(paramsType{"test_3_5013", 5013, 9})
+	testFunc(paramsType{"test_4_5", 5, 5})
 }
