@@ -45,26 +45,39 @@ type tokenType struct {
 	value string
 }
 
-var tokenStack []tokenType
-
-func pushToken(newToken tokenType) {
-	tokenStack = append(tokenStack, newToken)
+type stackType struct {
+	stack []tokenType
 }
 
-func popToken() tokenType {
-	tokenCount := len(tokenStack)
-	topToken := tokenStack[tokenCount-1]
-
-	tokenStack = tokenStack[0 : tokenCount-1]
-
-	return topToken
+type stackInterface interface {
+	push(token tokenType)
+	pop() tokenType
+	peek() (string, string)
+	len() int
 }
 
-func peekToken() (string, string) {
-	tokenCount := len(tokenStack)
-	topToken := tokenStack[tokenCount-1]
+func (stk *stackType) push(token tokenType) {
+	stk.stack = append(stk.stack, token)
+}
 
-	return topToken.kind, topToken.value
+func (stk *stackType) pop() tokenType {
+	count := stk.len()
+
+	top := stk.stack[count-1]
+	stk.stack = stk.stack[:count-1]
+
+	return top
+}
+
+func (stk *stackType) peek() (string, string) {
+	count := stk.len()
+	top := stk.stack[count-1]
+
+	return top.kind, top.value
+}
+
+func (stk *stackType) len() int {
+	return len(stk.stack)
 }
 
 // end: token stack
@@ -128,11 +141,13 @@ func DecodeString(encodedStr string) string {
 		return ""
 	}
 
+	var tokenStack stackType
+
 	tokenInputChan := make(chan tokenType, 2)
 
 	go tokenStream(encodedStr, tokenInputChan)
 
-	pushToken(tokenType{STACK_BOTTOM, STACK_BOTTOM})
+	tokenStack.push(tokenType{STACK_BOTTOM, STACK_BOTTOM})
 
 	endOfString := false
 	for !endOfString {
@@ -141,20 +156,20 @@ func DecodeString(encodedStr string) string {
 			lastStr := token.value
 
 			// if the stack top  is a STRING, combine this string with stack top
-			tokenKind, tokenValue := peekToken()
+			tokenKind, tokenValue := tokenStack.peek()
 			if tokenKind == STRING {
 				lastStr = tokenValue + lastStr
 
-				popToken()
+				tokenStack.pop()
 			}
 
-			pushToken(tokenType{STRING, lastStr})
+			tokenStack.push(tokenType{STRING, lastStr})
 
 		case CLOSE_BRACKET:
 			// pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
-			strToken := popToken() // enclosed STRING
-			popToken()             // OPEN_BRACKET
-			numToken := popToken() // NUMBER
+			strToken := tokenStack.pop() // enclosed STRING
+			tokenStack.pop()             // OPEN_BRACKET
+			numToken := tokenStack.pop() // NUMBER
 
 			repeatCount, _ := strconv.Atoi(numToken.value)
 
@@ -164,23 +179,23 @@ func DecodeString(encodedStr string) string {
 			}
 
 			// check if we have a STRING on top of stack
-			tokenKind, tokenValue := peekToken()
+			tokenKind, tokenValue := tokenStack.peek()
 			if tokenKind == STRING {
 				outStr = tokenValue + outStr
 
-				popToken()
+				tokenStack.pop()
 			}
 
-			pushToken(tokenType{STRING, outStr})
+			tokenStack.push(tokenType{STRING, outStr})
 
 		case END_OF_STRING:
 			endOfString = true
 
 		default:
-			pushToken(token)
+			tokenStack.push(token)
 		}
 	}
 
-	_, tokenValue := peekToken()
+	_, tokenValue := tokenStack.peek()
 	return tokenValue
 }
