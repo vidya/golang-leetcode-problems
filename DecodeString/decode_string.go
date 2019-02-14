@@ -25,18 +25,19 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"unicode"
 )
 
-const ENDOFSTRING = "ENDOFSTRING"
-const STRING = "STRING"
-const NUMBER = "NUMBER"
-const OPENBRACKET = "OPENBRACKET"
-const CLOSEBRACKET = "CLOSEBRACKET"
+const (
+	END_OF_STRING = string(iota)
+	STRING
+	NUMBER
+	OPEN_BRACKET
+	CLOSE_BRACKET
 
-const STACKBOTTOM = "STACKBOTTOM"
+	STACK_BOTTOM
+)
 
 // token stack
 type tokenType struct {
@@ -95,18 +96,18 @@ func getToken(str string, pos int) tokenType {
 }
 
 func tokenStream(str string, tokenChan chan tokenType) {
-	fmt.Printf("tokenStream(): encodedStr  = %s\n", str)
-	strLen := len(str)
+	defer close(tokenChan)
 
+	strLen := len(str)
 	count := 0
 	for count < strLen {
 		switch ch := rune(str[count]); ch {
 		case '[':
-			tokenChan <- tokenType{OPENBRACKET, "["}
+			tokenChan <- tokenType{OPEN_BRACKET, "["}
 			count += 1
 
 		case ']':
-			tokenChan <- tokenType{CLOSEBRACKET, "]"}
+			tokenChan <- tokenType{CLOSE_BRACKET, "]"}
 			count += 1
 
 		default:
@@ -117,8 +118,7 @@ func tokenStream(str string, tokenChan chan tokenType) {
 		}
 	}
 
-	tokenChan <- tokenType{ENDOFSTRING, "ENDOFSTRING"}
-	close(tokenChan)
+	tokenChan <- tokenType{END_OF_STRING, "END_OF_STRING"}
 }
 
 // end: token stream
@@ -132,7 +132,7 @@ func DecodeString(encodedStr string) string {
 
 	go tokenStream(encodedStr, tokenInputChan)
 
-	pushToken(tokenType{STACKBOTTOM, STACKBOTTOM})
+	pushToken(tokenType{STACK_BOTTOM, STACK_BOTTOM})
 
 	endOfString := false
 	for !endOfString {
@@ -150,10 +150,10 @@ func DecodeString(encodedStr string) string {
 
 			pushToken(tokenType{STRING, lastStr})
 
-		case CLOSEBRACKET:
-			// pop the STRING enclosed in brackets, OPENBRACKET and the preceding NUMBER
+		case CLOSE_BRACKET:
+			// pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
 			strToken := popToken() // enclosed STRING
-			popToken()             // OPENBRACKET
+			popToken()             // OPEN_BRACKET
 			numToken := popToken() // NUMBER
 
 			repeatCount, _ := strconv.Atoi(numToken.value)
@@ -173,7 +173,7 @@ func DecodeString(encodedStr string) string {
 
 			pushToken(tokenType{STRING, outStr})
 
-		case ENDOFSTRING:
+		case END_OF_STRING:
 			endOfString = true
 
 		default:
