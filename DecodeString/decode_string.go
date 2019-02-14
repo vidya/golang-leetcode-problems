@@ -40,28 +40,29 @@ const (
 )
 
 // token stack
-type tokenType struct {
+type Token struct {
 	kind  string
 	value string
 }
 
-type stackType struct {
-	stack []tokenType
+type Stack struct {
+	stack []Token
 }
 
 type stackInterface interface {
-	push(token tokenType)
-	pop() tokenType
-	peek() (string, string)
-	len() int
+	Push(token Token)
+	Pop() Token
+	Peek() (string, string)
+	Len() int
+	NewStack() *Stack
 }
 
-func (stk *stackType) push(token tokenType) {
+func (stk *Stack) Push(token Token) {
 	stk.stack = append(stk.stack, token)
 }
 
-func (stk *stackType) pop() tokenType {
-	count := stk.len()
+func (stk *Stack) Pop() Token {
+	count := stk.Len()
 
 	top := stk.stack[count-1]
 	stk.stack = stk.stack[:count-1]
@@ -69,21 +70,24 @@ func (stk *stackType) pop() tokenType {
 	return top
 }
 
-func (stk *stackType) peek() (string, string) {
-	count := stk.len()
+func (stk *Stack) Peek() (string, string) {
+	count := stk.Len()
 	top := stk.stack[count-1]
 
 	return top.kind, top.value
 }
 
-func (stk *stackType) len() int {
+func (stk *Stack) Len() int {
 	return len(stk.stack)
 }
 
+func NewStack() *Stack {
+	return &Stack{}
+}
 // end: token stack
 
 // token stream
-func getToken(str string, pos int) tokenType {
+func getToken(str string, pos int) Token {
 	tokenKind := NUMBER
 	if unicode.IsLetter(rune(str[pos])) {
 		tokenKind = STRING
@@ -105,10 +109,10 @@ func getToken(str string, pos int) tokenType {
 		tokenValue += string(ch)
 	}
 
-	return tokenType{tokenKind, tokenValue}
+	return Token{tokenKind, tokenValue}
 }
 
-func tokenStream(str string, tokenChan chan tokenType) {
+func tokenStream(str string, tokenChan chan Token) {
 	defer close(tokenChan)
 
 	strLen := len(str)
@@ -116,12 +120,12 @@ func tokenStream(str string, tokenChan chan tokenType) {
 	for count < strLen {
 		switch ch := rune(str[count]); ch {
 		case '[':
-			tokenChan <- tokenType{OPEN_BRACKET, "["}
-			count += 1
+			tokenChan <- Token{OPEN_BRACKET, "["}
+			count++
 
 		case ']':
-			tokenChan <- tokenType{CLOSE_BRACKET, "]"}
-			count += 1
+			tokenChan <- Token{CLOSE_BRACKET, "]"}
+			count++
 
 		default:
 			token := getToken(str, count)
@@ -131,9 +135,8 @@ func tokenStream(str string, tokenChan chan tokenType) {
 		}
 	}
 
-	tokenChan <- tokenType{END_OF_STRING, "END_OF_STRING"}
+	tokenChan <- Token{END_OF_STRING, "END_OF_STRING"}
 }
-
 // end: token stream
 
 func DecodeString(encodedStr string) string {
@@ -141,13 +144,13 @@ func DecodeString(encodedStr string) string {
 		return ""
 	}
 
-	var tokenStack stackType
+	tokenStack := NewStack()
 
-	tokenInputChan := make(chan tokenType, 2)
+	tokenInputChan := make(chan Token, 2)
 
 	go tokenStream(encodedStr, tokenInputChan)
 
-	tokenStack.push(tokenType{STACK_BOTTOM, STACK_BOTTOM})
+	tokenStack.Push(Token{STACK_BOTTOM, STACK_BOTTOM})
 
 	endOfString := false
 	for !endOfString {
@@ -156,20 +159,20 @@ func DecodeString(encodedStr string) string {
 			lastStr := token.value
 
 			// if the stack top  is a STRING, combine this string with stack top
-			tokenKind, tokenValue := tokenStack.peek()
+			tokenKind, tokenValue := tokenStack.Peek()
 			if tokenKind == STRING {
 				lastStr = tokenValue + lastStr
 
-				tokenStack.pop()
+				tokenStack.Pop()
 			}
 
-			tokenStack.push(tokenType{STRING, lastStr})
+			tokenStack.Push(Token{STRING, lastStr})
 
 		case CLOSE_BRACKET:
-			// pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
-			strToken := tokenStack.pop() // enclosed STRING
-			tokenStack.pop()             // OPEN_BRACKET
-			numToken := tokenStack.pop() // NUMBER
+			// Pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
+			strToken := tokenStack.Pop() // enclosed STRING
+			tokenStack.Pop()             // OPEN_BRACKET
+			numToken := tokenStack.Pop() // NUMBER
 
 			repeatCount, _ := strconv.Atoi(numToken.value)
 
@@ -179,23 +182,23 @@ func DecodeString(encodedStr string) string {
 			}
 
 			// check if we have a STRING on top of stack
-			tokenKind, tokenValue := tokenStack.peek()
+			tokenKind, tokenValue := tokenStack.Peek()
 			if tokenKind == STRING {
 				outStr = tokenValue + outStr
 
-				tokenStack.pop()
+				tokenStack.Pop()
 			}
 
-			tokenStack.push(tokenType{STRING, outStr})
+			tokenStack.Push(Token{STRING, outStr})
 
 		case END_OF_STRING:
 			endOfString = true
 
 		default:
-			tokenStack.push(token)
+			tokenStack.Push(token)
 		}
 	}
 
-	_, tokenValue := tokenStack.peek()
+	_, tokenValue := tokenStack.Peek()
 	return tokenValue
 }
