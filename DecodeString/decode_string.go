@@ -89,20 +89,21 @@ func NewStack() *Stack {
 
 // token stream
 func tokenStream(str string) <-chan Token {
-	rtChan := make(chan Token)
+	tChan := make(chan Token)
 
 	pos := 0
 	go func() {
 		strLen := len(str)
+		var token Token
+
 		for pos < strLen {
-			var nextToken Token
 			switch rune(str[pos]) {
 			case '[':
-				nextToken = Token{OPEN_BRACKET, "["}
+				token = Token{OPEN_BRACKET, "["}
 				pos += 1
 
 			case ']':
-				nextToken = Token{CLOSE_BRACKET, "["}
+				token = Token{CLOSE_BRACKET, "["}
 				pos += 1
 
 			default:
@@ -126,18 +127,18 @@ func tokenStream(str string) <-chan Token {
 					tStr += string(ch)
 				}
 
-				nextToken = Token{tKind, tStr}
+				token = Token{tKind, tStr}
 				pos += len(tStr)
 			}
 
-			rtChan <- nextToken
+			tChan <- token
 		}
 
-		rtChan <- Token{END_OF_STRING, "END_OF_STRING"}
-		close(rtChan)
+		tChan <- Token{END_OF_STRING, "END_OF_STRING"}
+		close(tChan)
 	}()
 
-	return rtChan
+	return tChan
 }
 
 // end: token stream
@@ -153,17 +154,17 @@ func DecodeString(encodedStr string) string {
 	for token := range tokenStream(encodedStr) {
 		switch token.kind {
 		case STRING:
-			lastStr := token.value
+			tv := token.value
 
 			// if the stack top  is a STRING, combine this string with stack top
 			tKind, tStr := tStk.Peek()
 			if tKind == STRING {
-				lastStr = tStr + lastStr
+				tv = tStr + tv
 
 				tStk.Pop()
 			}
 
-			tStk.Push(Token{STRING, lastStr})
+			tStk.Push(Token{STRING, tv})
 
 		case CLOSE_BRACKET:
 			// Pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
@@ -173,20 +174,20 @@ func DecodeString(encodedStr string) string {
 
 			repeatCount, _ := strconv.Atoi(numToken.value)
 
-			outStr := ""
+			tv := ""
 			for n := 0; n < repeatCount; n++ {
-				outStr += strToken.value
+				tv += strToken.value
 			}
 
 			// check if we have a STRING on top of stack
 			tKind, tStr := tStk.Peek()
 			if tKind == STRING {
-				outStr = tStr + outStr
+				tv = tStr + tv
 
 				tStk.Pop()
 			}
 
-			tStk.Push(Token{STRING, outStr})
+			tStk.Push(Token{STRING, tv})
 
 		case END_OF_STRING:
 			break
