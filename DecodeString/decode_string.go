@@ -39,7 +39,7 @@ const (
 	STACK_BOTTOM
 )
 
-// token stack
+//token stack
 type Token struct {
 	kind  string
 	value string
@@ -84,59 +84,62 @@ func (stk *Stack) Len() int {
 func NewStack() *Stack {
 	return &Stack{}
 }
+
 // end: token stack
 
 // token stream
-func getToken(str string, pos int) Token {
-	tokenKind := NUMBER
-	if unicode.IsLetter(rune(str[pos])) {
-		tokenKind = STRING
-	}
+func tokenStream(str string) <-chan Token {
+	rtChan := make(chan Token)
 
-	tokenValue := ""
-	strLen := len(str)
-	for n := 0; pos+n < strLen; n++ {
-		ch := rune(str[pos+n])
+	pos := 0
+	go func() {
+		strLen := len(str)
+		for pos < strLen {
+			var nextToken Token
+			switch rune(str[pos]) {
+			case '[':
+				nextToken = Token{OPEN_BRACKET, "["}
+				pos += 1
 
-		if (tokenKind == STRING) && !unicode.IsLetter(ch) {
-			break
+			case ']':
+				nextToken = Token{CLOSE_BRACKET, "["}
+				pos += 1
+
+			default:
+				tKind := NUMBER
+				if unicode.IsLetter(rune(str[pos])) {
+					tKind = STRING
+				}
+
+				tStr := ""
+				for n := 0; pos+n < strLen; n++ {
+					ch := rune(str[pos+n])
+
+					if (tKind == STRING) && !unicode.IsLetter(ch) {
+						break
+					}
+
+					if (tKind == NUMBER) && !unicode.IsDigit(ch) {
+						break
+					}
+
+					tStr += string(ch)
+				}
+
+				nextToken = Token{tKind, tStr}
+				pos += len(tStr)
+			}
+
+			rtChan <- nextToken
 		}
 
-		if (tokenKind == NUMBER) && !unicode.IsDigit(ch) {
-			break
-		}
+		rtChan <- Token{END_OF_STRING, "END_OF_STRING"}
+		close(rtChan)
+	}()
 
-		tokenValue += string(ch)
-	}
-
-	return Token{tokenKind, tokenValue}
+	return rtChan
 }
 
-func tokenStream(str string, tokenChan chan Token) {
-	defer close(tokenChan)
-
-	strLen := len(str)
-	count := 0
-	for count < strLen {
-		switch ch := rune(str[count]); ch {
-		case '[':
-			tokenChan <- Token{OPEN_BRACKET, "["}
-			count++
-
-		case ']':
-			tokenChan <- Token{CLOSE_BRACKET, "]"}
-			count++
-
-		default:
-			token := getToken(str, count)
-			tokenChan <- token
-
-			count += len(token.value)
-		}
-	}
-
-	tokenChan <- Token{END_OF_STRING, "END_OF_STRING"}
-}
 // end: token stream
 
 func DecodeString(encodedStr string) string {
@@ -144,35 +147,29 @@ func DecodeString(encodedStr string) string {
 		return ""
 	}
 
-	tokenStack := NewStack()
+	tStk := NewStack()
+	tStk.Push(Token{STACK_BOTTOM, STACK_BOTTOM})
 
-	tokenInputChan := make(chan Token, 2)
-
-	go tokenStream(encodedStr, tokenInputChan)
-
-	tokenStack.Push(Token{STACK_BOTTOM, STACK_BOTTOM})
-
-	endOfString := false
-	for !endOfString {
-		switch token := <-tokenInputChan; token.kind {
+	for token := range tokenStream(encodedStr) {
+		switch token.kind {
 		case STRING:
 			lastStr := token.value
 
 			// if the stack top  is a STRING, combine this string with stack top
-			tokenKind, tokenValue := tokenStack.Peek()
-			if tokenKind == STRING {
-				lastStr = tokenValue + lastStr
+			tKind, tStr := tStk.Peek()
+			if tKind == STRING {
+				lastStr = tStr + lastStr
 
-				tokenStack.Pop()
+				tStk.Pop()
 			}
 
-			tokenStack.Push(Token{STRING, lastStr})
+			tStk.Push(Token{STRING, lastStr})
 
 		case CLOSE_BRACKET:
 			// Pop the STRING enclosed in brackets, OPEN_BRACKETand the preceding NUMBER
-			strToken := tokenStack.Pop() // enclosed STRING
-			tokenStack.Pop()             // OPEN_BRACKET
-			numToken := tokenStack.Pop() // NUMBER
+			strToken := tStk.Pop() // enclosed STRING
+			tStk.Pop()             // OPEN_BRACKET
+			numToken := tStk.Pop() // NUMBER
 
 			repeatCount, _ := strconv.Atoi(numToken.value)
 
@@ -182,23 +179,23 @@ func DecodeString(encodedStr string) string {
 			}
 
 			// check if we have a STRING on top of stack
-			tokenKind, tokenValue := tokenStack.Peek()
-			if tokenKind == STRING {
-				outStr = tokenValue + outStr
+			tKind, tStr := tStk.Peek()
+			if tKind == STRING {
+				outStr = tStr + outStr
 
-				tokenStack.Pop()
+				tStk.Pop()
 			}
 
-			tokenStack.Push(Token{STRING, outStr})
+			tStk.Push(Token{STRING, outStr})
 
 		case END_OF_STRING:
-			endOfString = true
+			break
 
 		default:
-			tokenStack.Push(token)
+			tStk.Push(token)
 		}
 	}
 
-	_, tokenValue := tokenStack.Peek()
-	return tokenValue
+	_, tStr := tStk.Peek()
+	return tStr
 }
